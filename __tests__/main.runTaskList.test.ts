@@ -7,7 +7,7 @@ import { Pool } from "pg";
 
 const addJob = (pgPool: Pool, id: string | number) =>
   pgPool.query(
-    `select graphile_worker.add_job('job1', json_build_object('id', $1::text), 'serial')`,
+    `select assemble_worker.add_job('job1', json_build_object('id', $1::text), 'serial')`,
     [String(id != null ? id : Math.random())]
   );
 

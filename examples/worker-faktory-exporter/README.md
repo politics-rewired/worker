@@ -50,7 +50,7 @@ module.exports = async ({ param }) => {
 2. Add a job
 
 ```SQL
-  SELECT graphile_worker.add_job('faktory-exporter', '{"param": "sth"}');
+  SELECT assemble_worker.add_job('faktory-exporter', '{"param": "sth"}');
 ```
 
 

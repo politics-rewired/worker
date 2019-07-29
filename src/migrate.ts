@@ -5,8 +5,8 @@ async function installSchema(client: PoolClient) {
   await client.query(`
     create extension if not exists pgcrypto with schema public;
     create extension if not exists "uuid-ossp" with schema public;
-    create schema graphile_worker;
-    create table graphile_worker.migrations(
+    create schema assemble_worker;
+    create table assemble_worker.migrations(
       id int primary key,
       ts timestamptz default now() not null
     );
@@ -23,7 +23,7 @@ async function runMigration(
     text,
   });
   await client.query({
-    text: `insert into graphile_worker.migrations (id) values ($1)`,
+    text: `insert into assemble_worker.migrations (id) values ($1)`,
     values: [migrationNumber],
   });
 }
@@ -34,7 +34,7 @@ export async function migrate(client: PoolClient) {
     const {
       rows: [row],
     } = await client.query(
-      "select id from graphile_worker.migrations order by id desc limit 1;"
+      "select id from assemble_worker.migrations order by id desc limit 1;"
     );
     if (row) {
       latestMigration = row.id;

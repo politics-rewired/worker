@@ -70,7 +70,7 @@ you're ready, switch to using the `package.json` `"scripts"` entry instead.)
 Connect to your database and run the following SQL:
 
 ```sql
-SELECT graphile_worker.add_job('hello', json_build_object('name', 'Bobby Tables'));
+SELECT assemble_worker.add_job('hello', json_build_object('name', 'Bobby Tables'));
 ```
 
 ### Success!
@@ -161,7 +161,7 @@ yarn add graphile-worker
 
 ## Running
 
-`graphile-worker` manages it's own database schema (`graphile_worker`). Just
+`graphile-worker` manages it's own database schema (`assemble_worker`). Just
 point graphile-worker at your database and we handle our own migrations:
 
 ```
@@ -335,7 +335,7 @@ await addJob("task_2", { foo: "bar" });
 
 You can schedule jobs directly in the database, e.g. from a trigger or
 function, or by calling SQL from your application code. You do this using the
-`graphile_worker.add_job` function. (We'll add a JS helper for this soon...)
+`assemble_worker.add_job` function. (We'll add a JS helper for this soon...)
 
 `add_job` accepts the following parameters (in this order):
 
@@ -348,7 +348,7 @@ function, or by calling SQL from your application code. You do this using the
 Typically you'll want to set the `identifier` and `payload`:
 
 ```sql
-SELECT graphile_worker.add_job(
+SELECT assemble_worker.add_job(
   'send_email',
   json_build_object(
     'to', 'someone@example.com',
@@ -360,7 +360,7 @@ SELECT graphile_worker.add_job(
 You can skip parameters you don't need by using PostgreSQL's named parameter support:
 
 ```sql
-SELECT graphile_worker.add_job('reminder', run_at := NOW() + INTERVAL '2 days');
+SELECT assemble_worker.add_job('reminder', run_at := NOW() + INTERVAL '2 days');
 ```
 
 ### Example: scheduling job from trigger
@@ -371,7 +371,7 @@ This snippet creates a trigger function which adds a job to execute
 ```sql
 CREATE FUNCTION my_table_created() RETURNS trigger AS $$
 BEGIN
-  PERFORM graphile_worker.add_job('task_identifier_here', json_build_object('id', NEW.id));
+  PERFORM assemble_worker.add_job('task_identifier_here', json_build_object('id', NEW.id));
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql VOLATILE;
@@ -388,7 +388,7 @@ multiple triggers for multiple tables to quickly schedule jobs.
 ```sql
 CREATE FUNCTION trigger_job() RETURNS trigger AS $$
 BEGIN
-  PERFORM graphile_worker.add_job(TG_ARGV[0], json_build_object(
+  PERFORM assemble_worker.add_job(TG_ARGV[0], json_build_object(
     'schema', TG_TABLE_SCHEMA,
     'table', TG_TABLE_NAME,
     'op', TG_OP,
@@ -427,7 +427,7 @@ CREATE TRIGGER generate_pdf_update
 To delete the worker code and all the tasks from your database, just run this one SQL statement:
 
 ```sql
-DROP SCHEMA graphile_worker CASCADE;
+DROP SCHEMA assemble_worker CASCADE;
 ```
 
 ## Performance
@@ -511,6 +511,6 @@ yarn watch
 In another terminal:
 
 ```
-createdb graphile_worker_test
+createdb assemble_worker_test
 yarn test
 ```

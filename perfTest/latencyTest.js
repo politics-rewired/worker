@@ -6,7 +6,7 @@ const { default: deferred } = require("../dist/deferred");
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function main() {
-  const pgPool = new Pool({ connectionString: "graphile_worker_perftest" });
+  const pgPool = new Pool({ connectionString: "assemble_worker_perftest" });
   const startTimes = {};
   let latencies = [];
   const deferreds = {};
@@ -20,7 +20,7 @@ async function main() {
 
   // Warm up
   await pgPool.query(
-    `select graphile_worker.add_job('latency', json_build_object('id', -i)) from generate_series(1, 100) i`
+    `select assemble_worker.add_job('latency', json_build_object('id', -i)) from generate_series(1, 100) i`
   );
   await forEmptyQueue(pgPool);
   // Reset
@@ -40,7 +40,7 @@ async function main() {
         deferreds[id] = deferred();
         startTimes[id] = process.hrtime();
         await client.query(
-          `select graphile_worker.add_job('latency', json_build_object('id', $1::int))`,
+          `select assemble_worker.add_job('latency', json_build_object('id', $1::int))`,
           [id]
         );
         await deferreds[id];
@@ -86,7 +86,7 @@ async function forEmptyQueue(pgPool) {
     const {
       rows: [row]
     } = await pgPool.query(
-      `select count(*) from graphile_worker.jobs where task_identifier = 'latency'`
+      `select count(*) from assemble_worker.jobs where task_identifier = 'latency'`
     );
     remaining = (row && row.count) || 0;
     sleep(2000);

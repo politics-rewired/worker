@@ -175,9 +175,9 @@ export function runTaskList(
         debug("RELEASING THE JOBS", workerIds);
         const { rows: cancelledJobs } = await pgPool.query(
           `
-          SELECT graphile_worker.fail_job(job_queues.locked_by, jobs.id, $2)
-          FROM graphile_worker.jobs
-          INNER JOIN graphile_worker.job_queues ON (job_queues.queue_name = jobs.queue_name)
+          SELECT assemble_worker.fail_job(job_queues.locked_by, jobs.id, $2)
+          FROM assemble_worker.jobs
+          INNER JOIN assemble_worker.job_queues ON (job_queues.queue_name = jobs.queue_name)
           WHERE job_queues.locked_by = ANY($1::text[]) AND jobs.id = ANY($3::int[]);
         `,
           [workerIds, message, jobsInProgress.map(job => job.id)]

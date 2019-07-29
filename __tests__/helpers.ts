@@ -6,7 +6,7 @@ export async function withPgPool<T = any>(
   cb: (pool: pg.Pool) => Promise<T>
 ): Promise<T> {
   const pool = new pg.Pool({
-    connectionString: "graphile_worker_test"
+    connectionString: "assemble_worker_test"
   });
   try {
     return await cb(pool);
@@ -47,7 +47,7 @@ function isPoolClient(o: any): o is pg.PoolClient {
 }
 
 export async function reset(pgPoolOrClient: pg.Pool | pg.PoolClient) {
-  await pgPoolOrClient.query("drop schema if exists graphile_worker cascade;");
+  await pgPoolOrClient.query("drop schema if exists assembe_worker cascade;");
   if (isPoolClient(pgPoolOrClient)) {
     await migrate(pgPoolOrClient);
   } else {
@@ -66,7 +66,7 @@ export async function jobCount(
   const {
     rows: [row]
   } = await pgPoolOrClient.query(
-    "select count(*)::int from graphile_worker.jobs"
+    "select count(*)::int from assemble_worker.jobs"
   );
   return row ? row.count || 0 : 0;
 }

@@ -17,4 +17,4 @@ export const MAX_CONTIGUOUS_ERRORS = 10;
 /**
  * Number of jobs to run concurrently
  */
-export const CONCURRENT_JOBS = 1;
+export const CONCURRENT_JOBS = 1000;

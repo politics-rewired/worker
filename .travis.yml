@@ -50,7 +50,7 @@ env:
     - PGPORT=5432
 
 before_script:
-  - psql -c 'create database graphile_worker_test' -U postgres
+  - psql -c 'create database assemble_worker_test' -U postgres
 
 script:
   - psql -c "SELECT version();"

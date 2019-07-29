@@ -11,18 +11,18 @@ test("runs jobs", () =>
 
     // Schedule a job
     const start = new Date();
-    await pgClient.query(`select graphile_worker.add_job('job1', '{"a": 1}')`);
+    await pgClient.query(`select assemble_worker.add_job('job1', '{"a": 1}')`);
 
     // Assert that it has an entry in jobs / job_queues
     const { rows: jobs } = await pgClient.query(
-      `select * from graphile_worker.jobs`
+      `select * from assemble_worker.jobs`
     );
     expect(jobs).toHaveLength(1);
     const job = jobs[0];
     expect(+job.run_at).toBeGreaterThanOrEqual(+start);
     expect(+job.run_at).toBeLessThanOrEqual(+new Date());
     const { rows: jobQueues } = await pgClient.query(
-      `select * from graphile_worker.job_queues`
+      `select * from assemble_worker.job_queues`
     );
     expect(jobQueues).toHaveLength(1);
     const q = jobQueues[0];
@@ -58,11 +58,11 @@ test("schedules errors for retry", () =>
 
     // Schedule a job
     const start = new Date();
-    await pgClient.query(`select graphile_worker.add_job('job1', '{"a": 1}')`);
+    await pgClient.query(`select assemble_worker.add_job('job1', '{"a": 1}')`);
 
     {
       const { rows: jobs } = await pgClient.query(
-        `select * from graphile_worker.jobs`
+        `select * from assemble_worker.jobs`
       );
       expect(jobs).toHaveLength(1);
       const job = jobs[0];
@@ -72,7 +72,7 @@ test("schedules errors for retry", () =>
       expect(+job.run_at).toBeLessThanOrEqual(+new Date());
 
       const { rows: jobQueues } = await pgClient.query(
-        `select * from graphile_worker.job_queues`
+        `select * from assemble_worker.job_queues`
       );
       expect(jobQueues).toHaveLength(1);
       const q = jobQueues[0];
@@ -95,7 +95,7 @@ test("schedules errors for retry", () =>
     // Check that it failed as expected
     {
       const { rows: jobs } = await pgClient.query(
-        `select * from graphile_worker.jobs`
+        `select * from assemble_worker.jobs`
       );
       expect(jobs).toHaveLength(1);
       const job = jobs[0];
@@ -108,7 +108,7 @@ test("schedules errors for retry", () =>
       expect(+job.run_at).toBeLessThanOrEqual(+new Date() + 2719);
 
       const { rows: jobQueues } = await pgClient.query(
-        `select * from graphile_worker.job_queues`
+        `select * from assemble_worker.job_queues`
       );
       expect(jobQueues).toHaveLength(1);
       const q = jobQueues[0];
@@ -124,7 +124,7 @@ test("retries job", () =>
     await reset(pgClient);
 
     // Add the job
-    await pgClient.query(`select graphile_worker.add_job('job1', '{"a": 1}')`);
+    await pgClient.query(`select assemble_worker.add_job('job1', '{"a": 1}')`);
     let counter = 0;
     const job1: Task = jest.fn(() => {
       throw new Error(`TEST_ERROR ${++counter}`);
@@ -143,7 +143,7 @@ test("retries job", () =>
 
     // Tell the job to be runnable
     await pgClient.query(
-      `update graphile_worker.jobs set run_at = now() where task_identifier = 'job1'`
+      `update assemble_worker.jobs set run_at = now() where task_identifier = 'job1'`
     );
 
     // Run the job
@@ -156,7 +156,7 @@ test("retries job", () =>
     // And it should have been rejected again
     {
       const { rows: jobs } = await pgClient.query(
-        `select * from graphile_worker.jobs`
+        `select * from assemble_worker.jobs`
       );
       expect(jobs).toHaveLength(1);
       const job = jobs[0];
@@ -169,7 +169,7 @@ test("retries job", () =>
       expect(+job.run_at).toBeLessThanOrEqual(+new Date() + 7389);
 
       const { rows: jobQueues } = await pgClient.query(
-        `select * from graphile_worker.job_queues`
+        `select * from assemble_worker.job_queues`
       );
       expect(jobQueues).toHaveLength(1);
       const q = jobQueues[0];
@@ -186,7 +186,7 @@ test("supports future-scheduled jobs", () =>
 
     // Add the job
     await pgClient.query(
-      `select graphile_worker.add_job('future', run_at := now() + interval '3 seconds')`
+      `select assemble_worker.add_job('future', run_at := now() + interval '3 seconds')`
     );
     const future: Task = jest.fn();
     const tasks: TaskList = {
@@ -203,7 +203,7 @@ test("supports future-scheduled jobs", () =>
 
     // Tell the job to be runnable
     await pgClient.query(
-      `update graphile_worker.jobs set run_at = now() where task_identifier = 'future'`
+      `update assemble_worker.jobs set run_at = now() where task_identifier = 'future'`
     );
 
     // Run the job
@@ -215,11 +215,11 @@ test("supports future-scheduled jobs", () =>
     // It should be successful
     {
       const { rows: jobs } = await pgClient.query(
-        `select * from graphile_worker.jobs`
+        `select * from assemble_worker.jobs`
       );
       expect(jobs).toHaveLength(0);
       const { rows: jobQueues } = await pgClient.query(
-        `select * from graphile_worker.job_queues`
+        `select * from assemble_worker.job_queues`
       );
       expect(jobQueues).toHaveLength(0);
     }
@@ -231,7 +231,7 @@ test("runs jobs asynchronously", () =>
 
     // Schedule a job
     const start = new Date();
-    await pgClient.query(`select graphile_worker.add_job('job1', '{"a": 1}')`);
+    await pgClient.query(`select assemble_worker.add_job('job1', '{"a": 1}')`);
 
     // Run the task
     let jobPromise: Deferred<void> | null = null;
@@ -260,7 +260,7 @@ test("runs jobs asynchronously", () =>
 
     {
       const { rows: jobs } = await pgClient.query(
-        `select * from graphile_worker.jobs`
+        `select * from assemble_worker.jobs`
       );
       expect(jobs).toHaveLength(1);
       const job = jobs[0];
@@ -271,7 +271,7 @@ test("runs jobs asynchronously", () =>
       expect(job.attempts).toEqual(1); // It gets increased when the job is checked out
 
       const { rows: jobQueues } = await pgClient.query(
-        `select * from graphile_worker.job_queues`
+        `select * from assemble_worker.job_queues`
       );
       expect(jobQueues).toHaveLength(1);
       const q = jobQueues[0];
@@ -298,7 +298,7 @@ test("runs jobs in parallel", () =>
     // Schedule 5 jobs
     const start = new Date();
     await pgClient.query(
-      `select graphile_worker.add_job('job1', '{"a": 1}') from generate_series(1, 5)`
+      `select assemble_worker.add_job('job1', '{"a": 1}') from generate_series(1, 5)`
     );
 
     // Run the task
@@ -333,7 +333,7 @@ test("runs jobs in parallel", () =>
 
     {
       const { rows: jobs } = await pgClient.query(
-        `select * from graphile_worker.jobs`
+        `select * from assemble_worker.jobs`
       );
       expect(jobs).toHaveLength(5);
       jobs.forEach(job => {
@@ -345,7 +345,7 @@ test("runs jobs in parallel", () =>
       });
 
       const { rows: jobQueues } = await pgClient.query(
-        `select * from graphile_worker.job_queues`
+        `select * from assemble_worker.job_queues`
       );
       expect(jobQueues).toHaveLength(5);
       const locks: Array<string> = [];
@@ -377,7 +377,7 @@ test("single worker runs jobs in series, purges all before exit", () =>
 
     // Schedule 5 jobs
     await pgClient.query(
-      `select graphile_worker.add_job('job1', '{"a": 1}') from generate_series(1, 5)`
+      `select assemble_worker.add_job('job1', '{"a": 1}') from generate_series(1, 5)`
     );
 
     // Run the task
@@ -425,7 +425,7 @@ test("jobs added to the same queue will be ran serially (even if multiple worker
 
     // Schedule 5 jobs
     await pgClient.query(
-      `select graphile_worker.add_job('job1', '{"a": 1}', 'serial') from generate_series(1, 5)`
+      `select assemble_worker.add_job('job1', '{"a": 1}', 'serial') from generate_series(1, 5)`
     );
 
     // Run the task

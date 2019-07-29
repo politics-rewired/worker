@@ -7,7 +7,7 @@ export function makeAddJob(withPgClient: WithPgClient) {
     return withPgClient(async pgClient => {
       const { rows } = await pgClient.query(
         `
-        select * from graphile_worker.add_job(
+        select * from assemble_worker.add_job(
           identifier => $1::text,
           payload => $2::json,
           queue_name => coalesce($3::text, public.gen_random_uuid()::text),

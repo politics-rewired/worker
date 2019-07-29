@@ -71,7 +71,7 @@ export function makeNewWorker(
       const {
         rows: [jobRow],
       } = await withPgClient(client =>
-        client.query("SELECT * FROM graphile_worker.get_job($1, $2);", [
+        client.query("SELECT * FROM assemble_worker.get_job($1, $2);", [
           workerId,
           supportedTaskNames,
         ])
@@ -173,7 +173,7 @@ export function makeNewWorker(
         );
         // TODO: retry logic, in case of server connection interruption
         await withPgClient(client =>
-          client.query("SELECT * FROM graphile_worker.fail_job($1, $2, $3);", [
+          client.query("SELECT * FROM assemble_worker.fail_job($1, $2, $3);", [
             workerId,
             job.id,
             message,
@@ -190,7 +190,7 @@ export function makeNewWorker(
         }
         // TODO: retry logic, in case of server connection interruption
         await withPgClient(client =>
-          client.query("SELECT * FROM graphile_worker.complete_job($1, $2);", [
+          client.query("SELECT * FROM assemble_worker.complete_job($1, $2);", [
             workerId,
             job.id,
           ])
