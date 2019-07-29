@@ -1,165 +1,118 @@
 BEGIN;
+
 -- Create the tables
 create table assemble_worker.job_queues (
   queue_name text not null primary key,
-  job_count int not null,
-  locked_at timestamptz,
-  locked_by text
+  created boolean default false
 );
-alter table assemble_worker.job_queues enable row level security;
+
+create table assemble_worker.pending_jobs (
+  queue_name text not null,
+  payload json default '{}'::json not null,
+  max_attempts int default 25 not null,
+  created_at timestamp with time zone not null default now()
+);
+
+create index queue_name_idx on assemble_worker.pending_jobs (queue_name);
 
 create table assemble_worker.jobs (
   id bigserial primary key,
-  queue_name text default (public.gen_random_uuid())::text not null,
-  task_identifier text not null,
+  queue_name text not null,
   payload json default '{}'::json not null,
-  priority int default 0 not null,
-  run_at timestamptz default now() not null,
   attempts int default 0 not null,
   max_attempts int default 25 not null,
-  last_error text,
-  created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  errors text[] default ARRAY[]::text[],
+  ran_at timestamp[] default ARRAY[]::text[],
+  created_at timestamp not null default now()
 );
 
-
-alter table assemble_worker.jobs enable row level security;
-
-create index on assemble_worker.jobs (priority, run_at, id);
-
--- Keep updated_at up to date
-create function assemble_worker.tg__update_timestamp() returns trigger as $$
+-- Notify worker of new queues to be created in Rabbit
+create function assemble_worker.tg_job_queues__notify_new_queues() returns trigger as $$
 begin
-  new.updated_at = greatest(now(), old.updated_at + interval '1 millisecond');
-  return new;
+  perform pg_notify('assemble-worker', 'meta:new-queue' || '|', NEW.queue_name)
+  return NEW;
 end;
 $$ language plpgsql;
 
-create trigger _100_timestamps before update on assemble_worker.jobs for each row execute procedure assemble_worker.tg__update_timestamp();
-
--- Manage the job_queues table - creating and deleting entries as appropriate
-create function assemble_worker.jobs__decrease_job_queue_count() returns trigger as $$
-declare
-  v_new_job_count int;
+-- When a queue has been created, send pending jobs for that queue to jobs 
+create function assemble_worker.tg_job_queues__after_queue_create() returns trigger as $$
 begin
-  update assemble_worker.job_queues
-    set job_count = job_queues.job_count - 1
-    where queue_name = old.queue_name
-    returning job_count into v_new_job_count;
+  create temp table assemble_worker.pending_jobs_to_queue as
+  select payload, created_at, max_attempts
+  from assemble_worker.pending_jobs
+  where queue_name = NEW.queue_name;
 
-  if v_new_job_count <= 0 then
-    delete from assemble_worker.job_queues where queue_name = old.queue_name and job_count <= 0;
-  end if;
+  insert into assemble_worker.jobs (queue_name, payload, created_at, max_attempts)
+  select NEW.queue_name as queue_name, payload, created_at, max_attempts
+  from assemble_worker.pending_jobs_to_queue;
 
-  return old;
+  delete from assemble_worker.pending_jobs_to_queue
+  where queue_name = NEW.queue_name;
 end;
 $$ language plpgsql;
-create function assemble_worker.jobs__increase_job_queue_count() returns trigger as $$
-begin
-  insert into assemble_worker.job_queues(queue_name, job_count)
-    values(new.queue_name, 1)
-    on conflict (queue_name)
-    do update
-    set job_count = job_queues.job_count + 1;
 
-  return new;
-end;
-$$ language plpgsql;
-create trigger _500_increase_job_queue_count after insert on assemble_worker.jobs for each row execute procedure assemble_worker.jobs__increase_job_queue_count();
-create trigger _500_decrease_job_queue_count after delete on assemble_worker.jobs for each row execute procedure assemble_worker.jobs__decrease_job_queue_count();
-create trigger _500_increase_job_queue_count_update after update of queue_name on assemble_worker.jobs for each row execute procedure assemble_worker.jobs__increase_job_queue_count();
-create trigger _500_decrease_job_queue_count_update after update of queue_name on assemble_worker.jobs for each row execute procedure assemble_worker.jobs__decrease_job_queue_count();
+create trigger _500_queue_pending_jobs after update on assemble_worker.job_queues when (OLD.created = false and NEW.created = true) for each statement execute procedure assemble_worker.tg_job_queues__after_queue_create();
 
 -- Notify worker of new jobs
 create function assemble_worker.tg_jobs__notify_new_jobs() returns trigger as $$
 begin
-  perform pg_notify('jobs:insert', '');
-  return new;
+  perform pg_notify('assemble-worker', NEW.queue_name || '|' || payload::text);
+  return NEW;
 end;
 $$ language plpgsql;
+
 create trigger _900_notify_worker after insert on assemble_worker.jobs for each statement execute procedure assemble_worker.tg_jobs__notify_new_jobs();
 
--- Function to queue a job
-create function assemble_worker.add_job(identifier text, payload json = '{}', queue_name text = public.gen_random_uuid()::text, run_at timestamptz = now(), max_attempts int = 25) returns assemble_worker.jobs as $$
-  insert into assemble_worker.jobs(task_identifier, payload, queue_name, run_at, max_attempts) values(identifier, payload, queue_name, run_at, max_attempts) returning *;
-$$ language sql;
-
--- The main function - find me a job to do!
-create function assemble_worker.get_job(worker_id text, task_identifiers text[] = null, job_expiry interval = interval '4 hours') returns assemble_worker.jobs as $$
+-- Function to queue a job - put it into pending_jobs if the queue does not exist yet
+create function assemble_worker.add_job(job_name text, payload json = '{}', max_attempts int = 25) returns void as $$
 declare
-  v_job_id bigint;
-  v_queue_name text;
-  v_default_job_max_attempts text = '25';
-  v_row assemble_worker.jobs;
+  v_queue_exists boolean;
+  v_result 
 begin
-  if worker_id is null or length(worker_id) < 10 then
-    raise exception 'invalid worker id';
+  select exists (
+    select 1
+    from assemble.job_queues
+    where queue_name = job_name
+      and created = true;
+  ) into v_queue_exists;
+
+  if v_queue_exists then
+    insert into assemble_worker.jobs (job_name, payload, max_attempts)
+    values (job_name, payload, max_attempts);
+  else if
+    insert into assemble_worker.jobs (job_name, payload, max_attempts)
+    values (job_name, payload, max_attempts);
+
+    insert into assemble.job_queues (queue_name)
+    values (job_name)
+    on conflict (queue_name) do nothing; 
   end if;
-
-  select job_queues.queue_name, jobs.id into v_queue_name, v_job_id
-    from assemble_worker.jobs
-    inner join assemble_worker.job_queues using (queue_name)
-    where (locked_at is null or locked_at < (now() - job_expiry))
-    and run_at <= now()
-    and attempts < max_attempts
-    and (task_identifiers is null or task_identifier = any(task_identifiers))
-    order by priority asc, run_at asc, id asc
-    limit 1
-    for update of job_queues
-    skip locked;
-
-  if v_queue_name is null then
-    return null;
-  end if;
-
-  update assemble_worker.job_queues
-    set
-      locked_by = worker_id,
-      locked_at = now()
-    where job_queues.queue_name = v_queue_name;
-
-  update assemble_worker.jobs
-    set attempts = attempts + 1
-    where id = v_job_id
-    returning * into v_row;
-
-  return v_row;
 end;
 $$ language plpgsql;
 
 -- I was successful, mark the job as completed
-create function assemble_worker.complete_job(worker_id text, job_id bigint) returns assemble_worker.jobs as $$
+create function assemble_worker.complete_job(job_id bigint) returns assemble_worker.jobs as $$
 declare
   v_row assemble_worker.jobs;
 begin
   delete from assemble_worker.jobs
     where id = job_id
     returning * into v_row;
-
-  update assemble_worker.job_queues
-    set locked_by = null, locked_at = null
-    where queue_name = v_row.queue_name and locked_by = worker_id;
-
   return v_row;
 end;
 $$ language plpgsql;
 
--- I was unsuccessful, re-schedule the job please
-create function assemble_worker.fail_job(worker_id text, job_id bigint, error_message text) returns assemble_worker.jobs as $$
+-- I was unsuccessful, record the failure – it will be retried via Rabbit
+create function assemble_worker.fail_job(job_id bigint, error_message text) returns assemble_worker.jobs as $$
 declare
   v_row assemble_worker.jobs;
 begin
   update assemble_worker.jobs
     set
-      last_error = error_message,
-      run_at = greatest(now(), run_at) + (exp(least(attempts, 10))::text || ' seconds')::interval
+      errors = array_append(errors, error_message),
+      ran_at = array_append(ran_at, now())
     where id = job_id
     returning * into v_row;
-
-  update assemble_worker.job_queues
-    set locked_by = null, locked_at = null
-    where queue_name = v_row.queue_name and locked_by = worker_id;
-
   return v_row;
 end;
 $$ language plpgsql;
